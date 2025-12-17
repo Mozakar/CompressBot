@@ -10,7 +10,8 @@ app = Client(
     api_id=API_ID, 
     api_hash=API_HASH, 
     bot_token=API_TOKEN,
-    workdir=tempfile.gettempdir()
+    workdir=tempfile.gettempdir(),
+    max_concurrent_transmissions=5  # Allow more concurrent downloads for better speed
 )
 
 def log(message):
@@ -24,29 +25,94 @@ def get_file_size(filepath):
     return round(size / (1024 * 1024), 2)
 
 def download_progress(current, total, message_obj=None):
-    """Display download progress"""
+    """Display download progress - optimized for speed"""
     downloaded_mb = round(current / (1024 * 1024), 2)
     total_mb = round(total / (1024 * 1024), 2)
     percentage = round((current / total) * 100, 1) if total > 0 else 0
-    # Log every 5% or every 10 MB
-    if percentage % 5 == 0 or current % (10 * 1024 * 1024) < (1024 * 1024):
+    # Log less frequently to reduce overhead - every 10% or every 20 MB
+    if percentage % 10 == 0 or current % (20 * 1024 * 1024) < (1024 * 1024):
         log(f"⬇️  Downloading: {downloaded_mb} MB / {total_mb} MB ({percentage}%)")
 
 def download_media_safe(client, file_id, message, max_retries=3):
-    """Download file with error handling and retry"""
+    """Download file with error handling and retry - optimized for speed"""
+    import time
+    
+    output_path = None
+    
     for attempt in range(1, max_retries + 1):
         try:
             log(f"Download attempt {attempt}/{max_retries}...")
-            downloaded_file = client.download_media(
-                file_id,
-                progress=download_progress,
-                progress_args=(message,)
-            )
-            return downloaded_file
+            
+            # Create temporary file path
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
+                output_path = temp_file.name
+            
+            # Get total file size for progress tracking
+            total_size = 0
+            try:
+                if hasattr(message, 'video') and message.video:
+                    total_size = message.video.file_size or 0
+                elif hasattr(message, 'document') and message.document:
+                    total_size = message.document.file_size or 0
+                elif hasattr(message, 'animation') and message.animation:
+                    total_size = message.animation.file_size or 0
+            except:
+                pass
+            
+            # Use iter_download for maximum speed with optimized chunk size
+            try:
+                log("Starting high-speed download with iter_download...")
+                downloaded_bytes = 0
+                start_time = time.time()
+                last_log_time = start_time
+                
+                # Use larger chunk size (8MB) for maximum download speed
+                # Larger chunks = fewer network calls = faster download
+                chunk_size = 8 * 1024 * 1024  # 8MB chunks
+                
+                # Open file with larger buffer for faster writes
+                with open(output_path, 'wb', buffering=16 * 1024 * 1024) as f:  # 16MB buffer
+                    for chunk in client.iter_download(file_id, chunk_size=chunk_size):
+                        f.write(chunk)
+                        downloaded_bytes += len(chunk)
+                        
+                        # Update progress less frequently to reduce overhead
+                        # Log every 10MB or every 3 seconds
+                        current_time = time.time()
+                        if (downloaded_bytes % (10 * 1024 * 1024) == 0) or (current_time - last_log_time >= 3):
+                            elapsed = current_time - start_time
+                            speed = (downloaded_bytes / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+                            percentage = (downloaded_bytes / total_size * 100) if total_size > 0 else 0
+                            log(f"⬇️  Downloaded: {round(downloaded_bytes / (1024 * 1024), 2)} MB / {round(total_size / (1024 * 1024), 2) if total_size > 0 else '?'} MB ({round(percentage, 1)}%) | Speed: {round(speed, 2)} MB/s")
+                            last_log_time = current_time
+                
+                elapsed_total = time.time() - start_time
+                avg_speed = (downloaded_bytes / (1024 * 1024)) / elapsed_total if elapsed_total > 0 else 0
+                log(f"✅ Download completed: {output_path} | Average speed: {round(avg_speed, 2)} MB/s")
+                return output_path
+                
+            except AttributeError:
+                # Fallback to standard download_media if iter_download is not available
+                # Still optimize by specifying file_name to avoid double writes
+                log("Using standard download_media (iter_download not available)...")
+                downloaded_file = client.download_media(
+                    file_id,
+                    file_name=output_path,
+                    progress=download_progress,
+                    progress_args=(message,),
+                    in_memory=False  # Write directly to disk for better performance
+                )
+                log(f"✅ Download completed: {downloaded_file}")
+                return downloaded_file if downloaded_file else output_path
+            
         except Exception as e:
             log(f"❌ Download error (attempt {attempt}): {str(e)}")
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except:
+                    pass
             if attempt < max_retries:
-                import time
                 wait_time = attempt * 5  # 5, 10, 15 seconds
                 log(f"⏳ Waiting {wait_time} seconds before retry...")
                 time.sleep(wait_time)
