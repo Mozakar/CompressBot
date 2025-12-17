@@ -5,7 +5,7 @@ from datetime import datetime
 from pyrogram import Client, filters
 from config import API_ID, API_HASH, API_TOKEN, VIDEO_SCALE, VIDEO_FPS, VIDEO_CODEC, VIDEO_PIXEL_FORMAT, VIDEO_BITRATE, VIDEO_CRF, VIDEO_PRESET, VIDEO_AUDIO_CODEC, VIDEO_AUDIO_BITRATE, VIDEO_AUDIO_CHANNELS, VIDEO_AUDIO_SAMPLE_RATE, VIDEO_PROFILE
 
-app = Client("bot2", api_id=API_ID, api_hash=API_HASH, bot_token=API_TOKEN)
+app = Client("bot", api_id=API_ID, api_hash=API_HASH, bot_token=API_TOKEN)
 
 def log(message):
     """لاگ کردن پیام‌ها در کنسول با زمان"""
