@@ -24,6 +24,33 @@ def get_file_size(filepath):
     size = os.path.getsize(filepath)
     return round(size / (1024 * 1024), 2)
 
+def build_fast_ffmpeg_command(input_file, output_file):
+    """Build optimized ffmpeg command for maximum speed"""
+    # Use libx264 instead of libx265 for much faster encoding (3-5x faster)
+    video_codec = "libx264"  # Much faster than libx265
+    preset = "ultrafast"    # Fastest preset
+    threads = os.cpu_count() or 4  # Use all CPU cores
+    
+    cmd = (
+        f'ffmpeg -threads {threads} '  # Use all CPU cores for parallel processing
+        f'-i "{input_file}" '
+        f'-vf "scale={VIDEO_SCALE}:flags=fast_bilinear" '  # Fast bilinear scaling algorithm
+        f'-r {VIDEO_FPS} '
+        f'-c:v {video_codec} '  # Use faster codec
+        f'-preset {preset} '  # Fastest encoding preset
+        f'-crf {VIDEO_CRF} '
+        f'-pix_fmt {VIDEO_PIXEL_FORMAT} '
+        f'-movflags +faststart '  # Enable fast start for web playback
+        f'-c:a {VIDEO_AUDIO_CODEC} '
+        f'-b:a {VIDEO_AUDIO_BITRATE} '
+        f'-ac {VIDEO_AUDIO_CHANNELS} '
+        f'-ar {VIDEO_AUDIO_SAMPLE_RATE} '
+        f'-map_metadata -1 '  # Remove metadata to save time
+        f'-y '  # Overwrite output file without asking
+        f'"{output_file}"'
+    )
+    return cmd, threads
+
 def download_progress(current, total, message_obj=None):
     """Display download progress - optimized for speed"""
     downloaded_mb = round(current / (1024 * 1024), 2)
@@ -157,35 +184,24 @@ def handle_video(client, message):
         
         log(f"📁 Output file: {output_file}")
         
-        # Build ffmpeg command
-        cmd = (
-            f'ffmpeg -i "{downloaded_file}" '
-            f'-filter_complex "scale={VIDEO_SCALE}" '
-            f'-r {VIDEO_FPS} '
-            f'-c:v {VIDEO_CODEC} '
-            f'-pix_fmt {VIDEO_PIXEL_FORMAT} '
-            f'-b:v {VIDEO_BITRATE} '
-            f'-crf {VIDEO_CRF} '
-            f'-preset {VIDEO_PRESET} '
-            f'-c:a {VIDEO_AUDIO_CODEC} '
-            f'-b:a {VIDEO_AUDIO_BITRATE} '
-            f'-ac {VIDEO_AUDIO_CHANNELS} '
-            f'-ar {VIDEO_AUDIO_SAMPLE_RATE} '
-            f'-profile:v {VIDEO_PROFILE} '
-            f'-map_metadata -1 '
-            f'"{output_file}"'
-        )
+        # Build optimized ffmpeg command for speed
+        cmd, threads = build_fast_ffmpeg_command(downloaded_file, output_file)
         
-        log("🎬 Starting video compression...")
+        log("🎬 Starting fast video compression...")
+        log(f"Using {threads} CPU threads for parallel encoding")
         log(f"FFmpeg command: {cmd}")
         
-        # Execute ffmpeg
+        # Execute ffmpeg with timing
+        import time
+        start_time = time.time()
         process = subprocess.run(
             cmd,
             shell=True,
             capture_output=True,
             text=True
         )
+        elapsed_time = time.time() - start_time
+        log(f"⏱️  Compression took {round(elapsed_time, 2)} seconds")
         
         if process.returncode != 0:
             log(f"❌ Compression error!")
@@ -279,35 +295,24 @@ def handle_document_video(client, message):
         
         log(f"📁 Output file: {output_file}")
         
-        # Build ffmpeg command
-        cmd = (
-            f'ffmpeg -i "{downloaded_file}" '
-            f'-filter_complex "scale={VIDEO_SCALE}" '
-            f'-r {VIDEO_FPS} '
-            f'-c:v {VIDEO_CODEC} '
-            f'-pix_fmt {VIDEO_PIXEL_FORMAT} '
-            f'-b:v {VIDEO_BITRATE} '
-            f'-crf {VIDEO_CRF} '
-            f'-preset {VIDEO_PRESET} '
-            f'-c:a {VIDEO_AUDIO_CODEC} '
-            f'-b:a {VIDEO_AUDIO_BITRATE} '
-            f'-ac {VIDEO_AUDIO_CHANNELS} '
-            f'-ar {VIDEO_AUDIO_SAMPLE_RATE} '
-            f'-profile:v {VIDEO_PROFILE} '
-            f'-map_metadata -1 '
-            f'"{output_file}"'
-        )
+        # Build optimized ffmpeg command for speed
+        cmd, threads = build_fast_ffmpeg_command(downloaded_file, output_file)
         
-        log("🎬 Starting video compression...")
+        log("🎬 Starting fast video compression...")
+        log(f"Using {threads} CPU threads for parallel encoding")
         log(f"FFmpeg command: {cmd}")
         
-        # Execute ffmpeg
+        # Execute ffmpeg with timing
+        import time
+        start_time = time.time()
         process = subprocess.run(
             cmd,
             shell=True,
             capture_output=True,
             text=True
         )
+        elapsed_time = time.time() - start_time
+        log(f"⏱️  Compression took {round(elapsed_time, 2)} seconds")
         
         if process.returncode != 0:
             log(f"❌ Compression error!")
