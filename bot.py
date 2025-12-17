@@ -100,10 +100,12 @@ def is_video_file(filename):
 
 @app.on_message(filters.video | filters.animation)
 def handle_media(client, message):
+    print(message)
     file = client.download_media(message.video.file_id if message.video else message.animation.file_id)
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
         temp_filename = temp_file.name
     
+    print("temp_filename", temp_filename)
     # پردازش انیمیشن
     if message.animation:
         cmd = f'ffmpeg -i "{file}" "{temp_filename}"'
@@ -113,10 +115,11 @@ def handle_media(client, message):
             os.remove(file)
             return
     
+    print("step 2")
     # پردازش ویدیو با فشرده‌سازی
     cmd = f'ffmpeg -i "{file}" -filter_complex "scale={VIDEO_SCALE}" -r {VIDEO_FPS} -c:v {VIDEO_CODEC} -pix_fmt {VIDEO_PIXEL_FORMAT} -b:v {VIDEO_BITRATE} -crf {VIDEO_CRF} -preset {VIDEO_PRESET} -c:a {VIDEO_AUDIO_CODEC} -b:a {VIDEO_AUDIO_BITRATE} -ac {VIDEO_AUDIO_CHANNELS} -ar {VIDEO_AUDIO_SAMPLE_RATE} -profile:v {VIDEO_PROFILE} -map_metadata -1 "{temp_filename}"'
     returncode, status_msg = run_ffmpeg_with_progress(cmd, message, client)
-    
+    print("step 3")
     if returncode == 0:
         status_msg.edit_text("✅ پردازش کامل شد! در حال ارسال...")
         message.reply_video(temp_filename)
